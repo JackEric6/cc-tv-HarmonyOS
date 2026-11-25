@@ -1,0 +1,43 @@
+name: Build HarmonyOS HAP
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Install Linux build dependency
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgl1-mesa-dev
+
+      - name: Set up HarmonyOS SDK
+        uses: ErBWs/setup-ohos@4dbb63025116eb6165ceac58a4bf47cbdc5ac721
+        with:
+          version: 6.1.1.280
+          cache: false
+
+      - name: Show build environment
+        run: |
+          hvigorw -v
+          ohpm -v
+
+      - name: Build HAP
+        run: hvigorw --no-daemon assembleHap
+
+      - name: Upload HAP
+        uses: actions/upload-artifact@v4
+        with:
+          name: harmonyos-hap
+          path: entry/build/default/outputs/default/*.hap
+          if-no-files-found: error
