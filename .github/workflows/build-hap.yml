@@ -32,16 +32,67 @@ jobs:
           hvigorw -v
           ohpm -v
 
-      - name: Configure unsigned build
+      - name: Prepare HarmonyOS signing materials
+        env:
+          OHOS_STORE_BASE64: ${{ secrets.OHOS_STORE_BASE64 }}
+          OHOS_STORE_PASSWORD: ${{ secrets.OHOS_STORE_PASSWORD }}
+          OHOS_KEY_ALIAS: ${{ secrets.OHOS_KEY_ALIAS }}
+          OHOS_KEY_PASSWORD: ${{ secrets.OHOS_KEY_PASSWORD }}
+          OHOS_PROFILE_BASE64: ${{ secrets.OHOS_PROFILE_BASE64 }}
+          OHOS_CERT_BASE64: ${{ secrets.OHOS_CERT_BASE64 }}
         run: |
-          node -e "const fs=require('fs'); const p='build-profile.json5'; const c=JSON.parse(fs.readFileSync(p,'utf8')); delete c.app.signingConfigs; for (const product of c.app.products ?? []) delete product.signingConfig; fs.writeFileSync(p, JSON.stringify(c, null, 2) + '\n');"
+          set -euo pipefail
+          for name in OHOS_STORE_BASE64 OHOS_STORE_PASSWORD OHOS_KEY_ALIAS OHOS_KEY_PASSWORD OHOS_PROFILE_BASE64 OHOS_CERT_BASE64; do
+            if [[ -z "${!name}" ]]; then
+              echo "::error::Missing required GitHub Actions secret: ${name}"
+              exit 1
+            fi
+          done
 
-      - name: Build unsigned HAP
+          export OHOS_SIGN_DIR="$RUNNER_TEMP/cc-tv-signing"
+          mkdir -p "$OHOS_SIGN_DIR"
+          printf '%s' "$OHOS_STORE_BASE64" | base64 --decode > "$OHOS_SIGN_DIR/release.p12"
+          printf '%s' "$OHOS_PROFILE_BASE64" | base64 --decode > "$OHOS_SIGN_DIR/profile.p7b"
+          printf '%s' "$OHOS_CERT_BASE64" | base64 --decode > "$OHOS_SIGN_DIR/release.cer"
+
+          node <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+          const profilePath = 'build-profile.json5';
+          const profile = JSON.parse(fs.readFileSync(profilePath, 'utf8'));
+          const signing = profile.app.signingConfigs.find((item) => item.name === 'default');
+          if (!signing) throw new Error('Missing default HarmonyOS signing config');
+          signing.material = {
+            ...signing.material,
+            storeFile: path.join(process.env.OHOS_SIGN_DIR, 'release.p12'),
+            storePassword: process.env.OHOS_STORE_PASSWORD,
+            keyAlias: process.env.OHOS_KEY_ALIAS,
+            keyPassword: process.env.OHOS_KEY_PASSWORD,
+            signAlg: 'SHA256withECDSA',
+            profile: path.join(process.env.OHOS_SIGN_DIR, 'profile.p7b'),
+            certpath: path.join(process.env.OHOS_SIGN_DIR, 'release.cer')
+          };
+          fs.writeFileSync(profilePath, `${JSON.stringify(profile, null, 2)}\n`);
+          NODE
+
+      - name: Build signed HAP
         run: hvigorw --no-daemon assembleHap
 
-      - name: Upload unsigned HAP
+      - name: Verify signed HAP
+        run: |
+          mapfile -t signed_haps < <(find entry/build/default/outputs/default -maxdepth 1 -type f -name '*-signed.hap' -print)
+          if [[ ${#signed_haps[@]} -eq 0 ]]; then
+            echo "::error::Build completed without producing a signed HAP"
+            exit 1
+          fi
+          for hap in "${signed_haps[@]}"; do
+            test -s "$hap"
+            sha256sum "$hap"
+          done
+
+      - name: Upload signed HAP
         uses: actions/upload-artifact@v4
         with:
-          name: harmonyos-hap-unsigned
-          path: entry/build/default/outputs/default/*.hap
+          name: harmonyos-hap-signed
+          path: entry/build/default/outputs/default/*-signed.hap
           if-no-files-found: error
