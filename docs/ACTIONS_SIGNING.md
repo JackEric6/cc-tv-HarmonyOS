@@ -1,6 +1,6 @@
 # GitHub Actions signing
 
-The build workflow uploads only `*-signed.hap` files. It requires these repository Actions secrets:
+The workflow builds the HAP, signs it with the SDK's `hap-sign-tool`, and uploads only `entry-default-signed.hap`. It is manually triggered and requires these repository Actions secrets:
 
 | Secret | Value |
 | --- | --- |
@@ -21,4 +21,4 @@ In Windows PowerShell, encode each file before adding it as a secret:
 [Convert]::ToBase64String([IO.File]::ReadAllBytes("release.cer"))
 ```
 
-Generate the debug signing set in DevEco Studio using Huawei account automatic signing, or use a matching debug certificate/profile issued for the app and device. A standalone random keystore is not enough for device installation. After all six secrets are configured, run **Build HarmonyOS HAP** from the Actions tab. The workflow fails before building if any secret is missing and uploads only signed HAP output.
+Generate the debug signing set in DevEco Studio using Huawei account automatic signing, or use a matching debug certificate/profile issued for the app and device. A standalone random keystore is not enough for device installation. After all six secrets are configured, run **Build HarmonyOS HAP** from the Actions tab. The workflow fails before SDK setup if any secret is missing and uploads only signed HAP output.
