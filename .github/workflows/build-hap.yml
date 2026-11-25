@@ -32,12 +32,16 @@ jobs:
           hvigorw -v
           ohpm -v
 
-      - name: Build HAP
+      - name: Configure unsigned build
+        run: |
+          node -e "const fs=require('fs'); const p='build-profile.json5'; const c=JSON.parse(fs.readFileSync(p,'utf8')); delete c.app.signingConfigs; for (const product of c.app.products ?? []) delete product.signingConfig; fs.writeFileSync(p, JSON.stringify(c, null, 2) + '\n');"
+
+      - name: Build unsigned HAP
         run: hvigorw --no-daemon assembleHap
 
-      - name: Upload HAP
+      - name: Upload unsigned HAP
         uses: actions/upload-artifact@v4
         with:
-          name: harmonyos-hap
+          name: harmonyos-hap-unsigned
           path: entry/build/default/outputs/default/*.hap
           if-no-files-found: error
