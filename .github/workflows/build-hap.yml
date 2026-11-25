@@ -97,13 +97,19 @@ jobs:
             -signCode 1 \
             -outFile entry/build/default/outputs/default/entry-default-signed.hap
 
-      - name: Verify signed HAP
+      - name: Verify signed HAP signature
         run: |
           signed_hap=entry/build/default/outputs/default/entry-default-signed.hap
           if [[ ! -s "$signed_hap" ]]; then
             echo "::error::Build completed without producing a non-empty signed HAP"
             exit 1
           fi
+
+          sign_tool="$(find "$HOS_SDK_HOME" -type f -name 'hap-sign-tool.jar' -print -quit)"
+          java -jar "$sign_tool" verify-app \
+            -inFile "$signed_hap" \
+            -outCertChain "$RUNNER_TEMP/cc-tv-signing/verified-cert-chain.pem" \
+            -outProfile "$RUNNER_TEMP/cc-tv-signing/verified-profile.p7b"
           sha256sum "$signed_hap"
 
       - name: Upload signed HAP
